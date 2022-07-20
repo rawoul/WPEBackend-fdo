@@ -61,6 +61,8 @@ sources = [
 	'src/extensions/audio-receiver.cpp',
 	'src/extensions/video-plane-display-dmabuf.cpp',
 	'src/extensions/video-plane-display-dmabuf-receiver.cpp',
+	'src/extensions/video-foreign-surface.cpp',
+	'src/extensions/video-foreign-surface-receiver.cpp',
 	'src/linux-dmabuf/linux-dmabuf.cpp',
 	'src/linux-dmabuf/linux-dmabuf-protocol.c',
 ]
@@ -80,6 +82,7 @@ api_headers = [
 extensions_api_headers = [
 	'include/wpe/extensions/audio.h',
 	'include/wpe/extensions/video-plane-display-dmabuf.h',
+	'include/wpe/extensions/video-foreign-surface.h',
 ]
 
 unstable_api_headers = [
@@ -166,6 +169,26 @@ wpe_video_plane_display_dmabuf_server_proto_header = custom_target(
 wpe_video_plane_display_dmabuf_proto_source = custom_target(
 	'video-plane-display-dmabuf-proto-source',
 	input: 'src/extensions/wpe-video-plane-display-dmabuf.xml',
+	output: '@BASENAME@-protocol.c',
+	command: [wayland_scanner, wayland_scanner_code, '@INPUT@', '@OUTPUT@'],
+)
+
+# Wayland extension: video foreign surface.
+wpe_video_foreign_surface_client_proto_header = custom_target(
+	'video-foreign-surface-client-proto-header',
+	input: 'src/extensions/wpe-video-foreign-surface.xml',
+	output: '@BASENAME@-client-protocol.h',
+	command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
+)
+wpe_video_foreign_surface_server_proto_header = custom_target(
+	'video-foreign-surface-server-proto-header',
+	input: 'src/extensions/wpe-video-foreign-surface.xml',
+	output: '@BASENAME@-server-protocol.h',
+	command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'],
+)
+wpe_video_foreign_surface_proto_source = custom_target(
+	'video-foreign-surface-proto-source',
+	input: 'src/extensions/wpe-video-foreign-surface.xml',
 	output: '@BASENAME@-protocol.c',
 	command: [wayland_scanner, wayland_scanner_code, '@INPUT@', '@OUTPUT@'],
 )
@@ -314,6 +337,9 @@ generated_sources = [
 	wpe_video_plane_display_dmabuf_proto_source,
 	wpe_video_plane_display_dmabuf_client_proto_header,
 	wpe_video_plane_display_dmabuf_server_proto_header,
+	wpe_video_foreign_surface_proto_source,
+	wpe_video_foreign_surface_client_proto_header,
+	wpe_video_foreign_surface_server_proto_header,
 	wayland_eglstream_controller_proto_source,
 	wayland_eglstream_controller_server_proto_header,
 	wpe_dmabuf_pool_client_proto_header,
