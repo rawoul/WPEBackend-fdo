@@ -48,6 +48,7 @@ struct wpe_view_backend_exportable_fdo_egl_client {
     void (*export_shm_buffer)(void* data, struct wpe_fdo_shm_exported_buffer* buffer);
     void (*_wpe_reserved0)(void);
     void (*_wpe_reserved1)(void);
+    void (*unexport_fdo_egl_image)(void* data, struct wpe_fdo_egl_exported_image* image);
 };
 
 struct wpe_view_backend_exportable_fdo*

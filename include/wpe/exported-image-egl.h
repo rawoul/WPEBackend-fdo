@@ -49,6 +49,12 @@ wpe_fdo_egl_exported_image_get_height(struct wpe_fdo_egl_exported_image*);
 EGLImageKHR
 wpe_fdo_egl_exported_image_get_egl_image(struct wpe_fdo_egl_exported_image*);
 
+void
+wpe_fdo_egl_exported_image_set_user_data(struct wpe_fdo_egl_exported_image*, void*);
+
+void *
+wpe_fdo_egl_exported_image_get_user_data(struct wpe_fdo_egl_exported_image*);
+
 #ifdef __cplusplus
 }
 #endif

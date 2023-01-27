@@ -36,4 +36,6 @@ struct wpe_fdo_egl_exported_image {
     bool exported { false };
     struct wl_resource* bufferResource { nullptr };
     struct wl_listener bufferDestroyListener;
+    void *exporter;
+    void *data { nullptr };
 };

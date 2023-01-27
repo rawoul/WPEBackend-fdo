@@ -188,6 +188,7 @@ public:
             return;
 
         auto* image = new struct wpe_fdo_egl_exported_image;
+        image->exporter = this;
         image->eglImage = eglImage;
         image->bufferResource = bufferResource;
         WS::instanceImpl<WS::ImplEGL>().queryBufferSize(bufferResource, &image->width, &image->height);
@@ -210,6 +211,7 @@ public:
             return;
 
         auto* image = new struct wpe_fdo_egl_exported_image;
+        image->exporter = this;
         image->eglImage = eglImage;
         image->bufferResource = dmabufBuffer->buffer_resource;
         image->width = dmabufBuffer->attributes.width;
@@ -247,10 +249,13 @@ public:
 
     void releaseImage(struct wpe_fdo_egl_exported_image* image)
     {
-        if (image->bufferResource)
+        assert(image->exported);
+        if (image->bufferResource) {
+            image->exported = false;
             viewBackend->releaseBuffer(image->bufferResource);
-        else
+        } else {
             deleteImage(image);
+        }
     }
 
     void releaseShmBuffer(struct wpe_fdo_shm_exported_buffer* buffer)
@@ -281,9 +286,13 @@ private:
         client->export_fdo_egl_image(data, image);
     }
 
-    static void deleteImage(struct wpe_fdo_egl_exported_image* image)
+    void deleteImage(struct wpe_fdo_egl_exported_image* image)
     {
         assert(image->eglImage);
+
+        if (client->unexport_fdo_egl_image)
+            client->unexport_fdo_egl_image(data, image);
+
         WS::instanceImpl<WS::ImplEGL>().destroyImage(image->eglImage);
 
         delete image;
@@ -295,6 +304,11 @@ private:
         image = wl_container_of(listener, image, bufferDestroyListener);
 
         image->bufferResource = nullptr;
+
+        if (!image->exported) {
+            ClientBundleEGL *that = static_cast<ClientBundleEGL*>(image->exporter);
+            that->deleteImage(image);
+        }
     }
 };
 
