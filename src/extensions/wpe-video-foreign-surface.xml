@@ -1,22 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="wpe_video_foreign_surface">
 
-  <interface name="wpe_video_foreign_surface" version="1">
-    <request name="create_update">
-      <arg name="id" type="new_id" interface="wpe_video_foreign_surface_update"/>
-      <arg name="video_id" type="uint" summary="video element unique identifier"/>
+  <interface name="wpe_video_foreign_surface_manager" version="1">
+    <request name="export_foreign_surface">
+      <arg name="id" type="new_id" interface="wpe_video_foreign_surface"/>
       <arg name="foreign_id" type="uint" summary="foreign surface identifier"/>
-      <arg name="x" type="int" summary="video x position coordinate"/>
-      <arg name="y" type="int" summary="video y position coordinate"/>
     </request>
-    <request name="end_of_stream">
-      <arg name="video_id" type="uint" summary="video element unique identifier"/>
-    </request>
-  </interface>
-
-  <interface name="wpe_video_foreign_surface_update" version="1">
-    <event name="release"/>
     <request name="destroy" type="destructor"/>
   </interface>
 
+  <interface name="wpe_video_foreign_surface" version="1">
+    <request name="set_position">
+      <arg name="x" type="int" summary="video x position coordinate"/>
+      <arg name="y" type="int" summary="video y position coordinate"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+  </interface>
 </protocol>

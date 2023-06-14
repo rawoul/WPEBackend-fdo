@@ -41,7 +41,8 @@ struct wpe_video_plane_display_dmabuf_export {
 };
 
 struct wpe_video_foreign_surface_export {
-    struct wl_resource* updateResource;
+    struct wl_resource* surfaceResource;
+    void* data;
 };
 
 struct wpe_audio_packet_export {
@@ -296,11 +297,6 @@ struct DmaBufUpdate {
     struct wl_client* client;
 };
 
-struct ForeignSurfaceUpdate {
-    uint32_t id { 0 };
-    struct wl_client* client;
-};
-
 struct AudioPacketUpdate {
     uint32_t id { 0 };
     struct wl_client* client;
@@ -347,7 +343,13 @@ static const struct wpe_video_plane_display_dmabuf_interface s_wpeDmaBufInterfac
     },
 };
 
-static const struct wpe_video_foreign_surface_update_interface s_videoForeignSurfaceUpdateInterface = {
+static const struct wpe_video_foreign_surface_interface s_videoForeignSurfaceInterface = {
+    // set_position
+    [](struct wl_client*, struct wl_resource* resource, int32_t x, int32_t y)
+    {
+        auto* foreign_surface_export = static_cast<wpe_video_foreign_surface_export*>(wl_resource_get_user_data(resource));
+        Instance::singleton().setVideoForeignSurfacePosition(foreign_surface_export, x, y);
+    },
     // destroy
     [](struct wl_client*, struct wl_resource* resource)
     {
@@ -355,35 +357,33 @@ static const struct wpe_video_foreign_surface_update_interface s_videoForeignSur
     },
 };
 
-static const struct wpe_video_foreign_surface_interface s_wpeForeignSurfaceInterface = {
-    // create_update
-    [](struct wl_client* client, struct wl_resource* resource, uint32_t id, uint32_t video_id, uint32_t foreign_surface_id, int32_t x, int32_t y)
+static const struct wpe_video_foreign_surface_manager_interface s_wpeForeignSurfaceManagerInterface = {
+    // export_foreign_surface
+    [](struct wl_client* client, struct wl_resource* resource, uint32_t id, uint32_t foreign_surface_id)
     {
-        struct wl_resource* updateResource = wl_resource_create(client, &wpe_video_foreign_surface_update_interface,
+        struct wl_resource* surfaceResource = wl_resource_create(client, &wpe_video_foreign_surface_interface,
             wl_resource_get_version(resource), id);
-        if (!updateResource) {
+        if (!surfaceResource) {
             wl_resource_post_no_memory(resource);
             return;
         }
 
-        auto* update = new ForeignSurfaceUpdate;
-        update->id = id;
-        update->client = client;
-        wl_resource_set_implementation(updateResource, &s_videoForeignSurfaceUpdateInterface, update,
+        auto* foreign_surface_export = new struct wpe_video_foreign_surface_export;
+        foreign_surface_export->surfaceResource = surfaceResource;
+
+        wl_resource_set_implementation(surfaceResource, &s_videoForeignSurfaceInterface, foreign_surface_export,
             [](struct wl_resource* resource)
             {
-                auto* update = static_cast<ForeignSurfaceUpdate*>(wl_resource_get_user_data(resource));
-                delete update;
+                auto* foreign_surface_export = static_cast<wpe_video_foreign_surface_export*>(wl_resource_get_user_data(resource));
+                delete foreign_surface_export;
             });
 
-        auto* foreign_surface_export = new struct wpe_video_foreign_surface_export;
-        foreign_surface_export->updateResource = updateResource;
-        Instance::singleton().handleVideoForeignSurface(foreign_surface_export, video_id, foreign_surface_id, x, y);
+        Instance::singleton().handleVideoForeignSurface(foreign_surface_export, foreign_surface_id);
     },
-    // end_of_stream
-    [](struct wl_client* client, struct wl_resource* resource, uint32_t video_id)
+    // destroy
+    [](struct wl_client*, struct wl_resource* resource)
     {
-        Instance::singleton().handleVideoForeignSurfaceEndOfStream(video_id);
+        wl_resource_destroy(resource);
     },
 };
 
@@ -536,8 +536,8 @@ Instance::~Instance()
     if (m_videoPlaneDisplayDmaBuf.object)
         wl_global_destroy(m_videoPlaneDisplayDmaBuf.object);
 
-    if (m_videoForeignSurface.object)
-        wl_global_destroy(m_videoForeignSurface.object);
+    if (m_videoForeignSurfaceManager.object)
+        wl_global_destroy(m_videoForeignSurfaceManager.object);
 
     if (m_audio.object)
         wl_global_destroy(m_audio.object);
@@ -611,46 +611,37 @@ void Instance::releaseVideoPlaneDisplayDmaBufExport(struct wpe_video_plane_displ
     wpe_video_plane_display_dmabuf_update_send_release(dmabuf_export->updateResource);
 }
 
-void Instance::initializeVideoForeignSurface(VideoForeignSurfaceCallback updateCallback, VideoForeignSurfaceEndOfStreamCallback endOfStreamCallback)
+void Instance::initializeVideoForeignSurface(VideoForeignSurfaceCallback exportCallback, VideoForeignSurfaceSetPositionCallback setPositionCallback)
 {
-    if (m_videoForeignSurface.object)
+    if (m_videoForeignSurfaceManager.object)
         return;
 
-    m_videoForeignSurface.object = wl_global_create(m_display, &wpe_video_foreign_surface_interface, 1, this,
+    m_videoForeignSurfaceManager.object = wl_global_create(m_display, &wpe_video_foreign_surface_manager_interface, 1, this,
         [](struct wl_client* client, void*, uint32_t version, uint32_t id)
         {
-            struct wl_resource* resource = wl_resource_create(client, &wpe_video_foreign_surface_interface, version, id);
+            struct wl_resource* resource = wl_resource_create(client, &wpe_video_foreign_surface_manager_interface, version, id);
             if (!resource) {
                 wl_client_post_no_memory(client);
                 return;
             }
 
-            wl_resource_set_implementation(resource, &s_wpeForeignSurfaceInterface, nullptr, nullptr);
+            wl_resource_set_implementation(resource, &s_wpeForeignSurfaceManagerInterface, nullptr, nullptr);
         });
-    m_videoForeignSurface.updateCallback = updateCallback;
-    m_videoForeignSurface.endOfStreamCallback = endOfStreamCallback;
+
+    m_videoForeignSurfaceManager.exportCallback = exportCallback;
+    m_videoForeignSurfaceManager.setPositionCallback = setPositionCallback;
 }
 
-void Instance::handleVideoForeignSurface(struct wpe_video_foreign_surface_export* foreign_surface_export, uint32_t id, uint32_t foreign_surface_id, int32_t x, int32_t y)
+void Instance::handleVideoForeignSurface(struct wpe_video_foreign_surface_export* foreign_surface_export, uint32_t foreign_surface_id)
 {
-    if (!m_videoForeignSurface.updateCallback) {
-        return;
-    }
-
-    m_videoForeignSurface.updateCallback(foreign_surface_export, id, foreign_surface_id, x, y);
+    if (m_videoForeignSurfaceManager.exportCallback)
+        m_videoForeignSurfaceManager.exportCallback(foreign_surface_export, foreign_surface_id);
 }
 
-void Instance::handleVideoForeignSurfaceEndOfStream(uint32_t id)
+void Instance::setVideoForeignSurfacePosition(struct wpe_video_foreign_surface_export* foreign_surface_export, int32_t x, int32_t y)
 {
-    if (!m_videoForeignSurface.endOfStreamCallback)
-        return;
-
-    m_videoForeignSurface.endOfStreamCallback(id);
-}
-
-void Instance::releaseVideoForeignSurfaceExport(struct wpe_video_foreign_surface_export* foreign_surface_export)
-{
-    wpe_video_foreign_surface_update_send_release(foreign_surface_export->updateResource);
+    if (m_videoForeignSurfaceManager.setPositionCallback)
+        m_videoForeignSurfaceManager.setPositionCallback(foreign_surface_export, x, y);
 }
 
 void Instance::initializeAudio(AudioStartCallback startCallback, AudioPacketCallback packetCallback, AudioStopCallback stopCallback, AudioPauseCallback pauseCallback, AudioResumeCallback resumeCallback)
@@ -769,3 +760,19 @@ bool Instance::dispatchFrameCallbacks(uint32_t bridgeId)
 }
 
 } // namespace WS
+
+extern "C" {
+
+__attribute__((visibility("default")))
+void wpe_video_foreign_surface_export_set_data(struct wpe_video_foreign_surface_export* foreign_surface_export, void *data)
+{
+    foreign_surface_export->data = data;
+}
+
+__attribute__((visibility("default")))
+void* wpe_video_foreign_surface_export_get_data(struct wpe_video_foreign_surface_export* foreign_surface_export)
+{
+    return foreign_surface_export->data;
+}
+
+}

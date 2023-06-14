@@ -31,8 +31,16 @@
 #include "ws-types.h"
 #include <glib.h>
 #include <wayland-client.h>
+#include <vector>
 
 namespace WS {
+
+class BaseBackendExtension {
+public:
+    virtual const char* name() const = 0;
+    virtual void registryGlobal(struct wl_registry* registry, uint32_t name, const char *interface, uint32_t version) = 0;
+    virtual void registryGlobalRemoved(uint32_t id) { }
+};
 
 class BaseBackend {
 protected:
@@ -41,8 +49,12 @@ protected:
 
 public:
     struct wl_display* display() const { return m_wl.display; }
+    struct wl_registry* registry() const { return m_wl.registry; }
 
     ClientImplementationType type() const { return m_type; }
+
+    void registerExtension(BaseBackendExtension* extension);
+    BaseBackendExtension* getExtension(const char* name) const;
 
 private:
     static const struct wl_registry_listener s_registryListener;
@@ -50,10 +62,13 @@ private:
 
     struct {
         struct wl_display* display;
+        struct wl_registry* registry;
         struct wpe_bridge* wpeBridge { nullptr };
     } m_wl;
 
     ClientImplementationType m_type { ClientImplementationType::Invalid };
+
+    std::vector<BaseBackendExtension*> m_extensions;
 };
 
 class BaseTarget {

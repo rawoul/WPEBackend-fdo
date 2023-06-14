@@ -164,12 +164,11 @@ public:
     void handleVideoPlaneDisplayDmaBufEndOfStream(uint32_t id);
     void releaseVideoPlaneDisplayDmaBufExport(struct wpe_video_plane_display_dmabuf_export*);
 
-    using VideoForeignSurfaceCallback = std::function<void(struct wpe_video_foreign_surface_export*, uint32_t, uint32_t, int32_t, int32_t)>;
-    using VideoForeignSurfaceEndOfStreamCallback = std::function<void(uint32_t)>;
-    void initializeVideoForeignSurface(VideoForeignSurfaceCallback, VideoForeignSurfaceEndOfStreamCallback);
-    void handleVideoForeignSurface(struct wpe_video_foreign_surface_export*, uint32_t id, uint32_t foreign_surface_id, int32_t x, int32_t y);
-    void handleVideoForeignSurfaceEndOfStream(uint32_t id);
-    void releaseVideoForeignSurfaceExport(struct wpe_video_foreign_surface_export*);
+    using VideoForeignSurfaceCallback = std::function<void(struct wpe_video_foreign_surface_export*, uint32_t)>;
+    using VideoForeignSurfaceSetPositionCallback = std::function<void(struct wpe_video_foreign_surface_export*, int32_t, int32_t)>;
+    void initializeVideoForeignSurface(VideoForeignSurfaceCallback, VideoForeignSurfaceSetPositionCallback);
+    void handleVideoForeignSurface(struct wpe_video_foreign_surface_export*, uint32_t foreign_surface_id);
+    void setVideoForeignSurfacePosition(struct wpe_video_foreign_surface_export*, int32_t x, int32_t y);
 
     using AudioStartCallback = std::function<void(uint32_t, int32_t, const char*, int32_t)>;
     using AudioPacketCallback = std::function<void(struct wpe_audio_packet_export*, uint32_t, int32_t, uint32_t)>;
@@ -208,9 +207,9 @@ private:
 
     struct {
         struct wl_global* object { nullptr };
-        VideoForeignSurfaceCallback updateCallback;
-        VideoForeignSurfaceEndOfStreamCallback endOfStreamCallback;
-    } m_videoForeignSurface;
+        VideoForeignSurfaceCallback exportCallback;
+        VideoForeignSurfaceSetPositionCallback setPositionCallback;
+    } m_videoForeignSurfaceManager;
 
     struct {
         struct wl_global* object { nullptr };

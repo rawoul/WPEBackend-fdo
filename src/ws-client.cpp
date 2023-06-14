@@ -26,7 +26,10 @@
 #include "ws-client.h"
 
 #include "ipc-messages.h"
+#include <algorithm>
 #include <cstring>
+
+void wpe_video_foreign_surface_extension_register(WS::BaseBackend& backend);
 
 namespace WS {
 
@@ -116,15 +119,14 @@ GSourceFuncs TargetSource::s_sourceFuncs = {
     nullptr, // closure_marshall
 };
 
-
 BaseBackend::BaseBackend(int hostFD)
 {
-    m_wl.display = wl_display_connect_to_fd(hostFD);
+    wpe_video_foreign_surface_extension_register(*this);
 
-    struct wl_registry* registry = wl_display_get_registry(m_wl.display);
-    wl_registry_add_listener(registry, &s_registryListener, this);
+    m_wl.display = wl_display_connect_to_fd(hostFD);
+    m_wl.registry = wl_display_get_registry(m_wl.display);
+    wl_registry_add_listener(m_wl.registry, &s_registryListener, this);
     wl_display_roundtrip(m_wl.display);
-    wl_registry_destroy(registry);
 
     if (!m_wl.wpeBridge)
         g_error("Failed to bind wpe_bridge");
@@ -137,20 +139,48 @@ BaseBackend::BaseBackend(int hostFD)
 BaseBackend::~BaseBackend()
 {
     g_clear_pointer(&m_wl.wpeBridge, wpe_bridge_destroy);
+    g_clear_pointer(&m_wl.registry, wl_registry_destroy);
     g_clear_pointer(&m_wl.display, wl_display_disconnect);
+}
+
+void BaseBackend::registerExtension(BaseBackendExtension* extension)
+{
+    m_extensions.push_back(extension);
+}
+
+BaseBackendExtension* BaseBackend::getExtension(const char *name) const
+{
+    auto it = std::find_if(begin(m_extensions), end(m_extensions), [=](const BaseBackendExtension* ext) {
+        return !std::strcmp(name, ext->name());
+    });
+
+    if (it == end(m_extensions))
+        return nullptr;
+
+    return *it;
 }
 
 const struct wl_registry_listener BaseBackend::s_registryListener = {
     // global
-    [](void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t)
+    [](void* data, struct wl_registry* registry, uint32_t name, const char* interface, uint32_t version)
     {
         auto& backend = *reinterpret_cast<BaseBackend*>(data);
 
         if (!std::strcmp(interface, "wpe_bridge"))
             backend.m_wl.wpeBridge = static_cast<struct wpe_bridge*>(wl_registry_bind(registry, name, &wpe_bridge_interface, 1));
+
+        std::for_each(begin(backend.m_extensions), end(backend.m_extensions), [=](BaseBackendExtension* ext) {
+            ext->registryGlobal(registry, name, interface, version);
+        });
     },
     // global_remove
-    [](void*, struct wl_registry*, uint32_t) { },
+    [](void* data, struct wl_registry*, uint32_t name) {
+        auto& backend = *reinterpret_cast<BaseBackend*>(data);
+
+        std::for_each(begin(backend.m_extensions), end(backend.m_extensions), [=](BaseBackendExtension* ext) {
+            ext->registryGlobalRemoved(name);
+        });
+    },
 };
 
 const struct wpe_bridge_listener BaseBackend::s_bridgeListener = {
